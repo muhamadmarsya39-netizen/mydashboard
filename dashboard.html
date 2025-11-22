@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Admin - Marsya</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Poppins", sans-serif; }
+        body { background: #eef2f7; color: #333; }
+        header { background: linear-gradient(135deg, #4A90E2, #007AFF); color: white; padding: 20px 40px; font-size: 26px; font-weight: bold; text-shadow: 0 2px 6px rgba(0,0,0,0.2); letter-spacing: 0.5px; }
+        .container { display: flex; min-height: 100vh; }
+        .sidebar { width: 260px; background: #1C2833; padding: 30px; color: white; }
+        .sidebar h3 { font-size: 20px; margin-bottom: 20px; }
+        .sidebar a { display: block; padding: 12px 15px; margin-bottom: 10px; color: white; border-radius: 8px; font-size: 15px; text-decoration: none; transition: 0.3s; cursor: pointer; }
+        .sidebar a:hover, .sidebar a.active { background: #34495E; transform: translateX(6px); }
+        .sidebar a.active { background: #007AFF; font-weight: bold; }
+        .main { flex: 1; padding: 40px 50px; }
+        #content-area { min-height: 60vh; }
+        #welcome { font-size: 22px; margin-bottom: 25px; font-weight: 600; }
+        .cards { display: flex; gap: 25px; flex-wrap: wrap; }
+        .card { flex: 1 1 220px; background: white; padding: 25px; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: 0.3s; position: relative; overflow: hidden; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        .card h4 { font-size: 18px; margin-bottom: 10px; color: #007AFF; }
+        .card p { font-size: 32px; font-weight: bold; }
+        .icon { position: absolute; right: 20px; top: 20px; font-size: 40px; opacity: 0.15; }
+        .content-box { margin-top: 40px; background: white; padding: 30px; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        .data-table th, .data-table td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+        .data-table th { background-color: #f2f2f2; color: #4A90E2; font-weight: 600; white-space: nowrap; }
+        .search-container { margin-bottom: 20px; display: flex; gap: 10px; }
+        .search-container input[type="text"] { padding: 10px; border: 1px solid #ccc; border-radius: 8px; width: 300px; font-size: 14px; }
+        .search-container button { padding: 10px 15px; background-color: #007AFF; color: white; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; }
+        .search-container button:hover { background-color: #0056b3; }
+        .settings-form label { display: block; margin-bottom: 8px; font-weight: 500; }
+        .settings-form input[type="password"] { width: 100%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .settings-form button { padding: 12px 20px; background-color: #2ecc71; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        .settings-form button:hover { background-color: #27ae60; }
+        .logout-btn { margin-top: 40px; padding: 12px 20px; background-color: #c0392b; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; }
+        .logout-btn:hover { background-color: #e74c3c; }
+        footer { margin-top: 50px; text-align: center; padding: 15px; color: #777; font-size: 14px; }
+        @media (max-width: 900px) { .container { flex-direction: column; } .sidebar { width: 100%; } }
+    </style>
+</head>
+<body>
+
+<header>My Dashboard  <div class="header-info" style="position:absolute; top:20px; right:20px; font-weight:600;">
+    <span id="clock"></span> | <span id="userName"></span>
+  </div>
+</header>
+
+<div class="container">
+    <div class="sidebar">
+        <h3>Menu Utama</h3>
+
+        <a id="menu-home" class="menu-item active">Home</a>
+        <a id="menu-users" class="menu-item">Data Users</a>
+        <a id="menu-summary" class="menu-item">Summary</a>
+        <a id="menu-battery" class="menu-item">Battery</a>
+        <a id="menu-motorcycle" class="menu-item">Motorcycle</a>
+        <a id="menu-swap-station" class="menu-item">Swap Station</a>
+        <a id="menu-settings" class="menu-item">Settings</a>
+        
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="main">
+        <div id="welcome">Memuat Dashboard...</div>
+        
+        <div id="content-area"></div>
+
+        <footer>
+            © 2025 Dashboard by Marsya — All rights reserved
+        </footer>
+    </div>
+</div>
+
+<script>
+    // --- GLOBAL STATE ---
+    let userList = [];
+    const token = localStorage.getItem("token");
+    const contentArea = document.getElementById("content-area");
+
+    // store raw dataset & headers for tables so search can re-render
+    window.tableDataStore = {};
+    window.tableHeadersStore = {};
+
+    // --- UTILITY FUNCTIONS ---
+    async function fetchUserCount() {
+        try {
+            const response = await fetch('/api/users');
+            if (!response.ok) throw new Error("Gagal mengambil data user list: " + response.status);
+            const data = await response.json();
+            const count = Array.isArray(data) ? data.length : 0;
+            const totalUsersElement = document.getElementById("totalUsers");
+            if (totalUsersElement) totalUsersElement.innerText = count.toString();
+
+            userList = data.map(user => ({
+                id: user.id || '-',
+                name: user.name || 'N/A',
+                email: user.email || 'N/A',
+                phone: user.phone_number || 'N/A',
+                city: user.city || 'N/A',
+                registration: user.created_at ? new Date(user.created_at).toLocaleDateString('id-ID') : 'N/A'
+            }));
+
+            if (document.querySelector('.menu-item.active')?.id === 'menu-users') renderContent('users');
+
+        } catch (error) {
+            console.error("❌ Error fetching user count/list from API:", error);
+            const totalUsersElement = document.getElementById("totalUsers");
+            if (totalUsersElement) totalUsersElement.innerText = "Error";
+            userList = [];
+            if (document.querySelector('.menu-item.active')?.id === 'menu-users') renderContent('users');
+        }
+    }
+
+    async function fetchProfile() {
+        if (!token) {
+            console.error("Token tidak ditemukan. Redirect ke halaman login.");
+            window.location.href = "html.html";
+            return;
+        }
+
+        try {
+            const response = await fetch("/profile", { headers: { "Authorization": "Bearer " + token } });
+            if (!response.ok) {
+                // jika token invalid atau error, redirect
+                console.error('Token invalid atau error saat fetch profile', response.status);
+                window.location.href = "html.html";
+                return;
+            }
+
+            const data = await response.json();
+            const userName = data.user ? data.user.name : "Admin";
+            document.getElementById("welcome").innerText = `Selamat datang kembali, ${userName}!`;
+            await fetchUserCount();
+            renderHome();
+        } catch (e) {
+            console.error("Fetch profile error:", e);
+            document.getElementById("welcome").innerText = "Gagal memuat profil.";
+            await fetchUserCount();
+            renderHome();
+        }
+    }
+
+    window.logout = function() {
+        localStorage.removeItem("token");
+        window.location.href = "html.html";
+    }
+
+    window.changePassword = function(event) {
+        event.preventDefault();
+        const newPass = document.getElementById('new_password').value;
+        const confPass = document.getElementById('confirm_password').value;
+
+        if (newPass !== confPass) {
+            alert('Password Baru dan Konfirmasi Password tidak sama!');
+            return;
+        }
+
+        // TODO: Implement proper API call to change password
+        alert('Password berhasil diubah! (Simulasi API call)');
+        document.querySelector('.settings-form')?.reset();
+    }
+
+    // Improved createTable: stores headers & data for later search/filter operations
+    function createTable(headers, data, emptyDataRow, searchField = null, id) {
+        const displayHeaders = Object.keys(data.length > 0 ? data[0] : emptyDataRow);
+        const displayData = data.length > 0 ? data : [emptyDataRow];
+
+        // store for later
+        window.tableDataStore[id] = data.slice();
+        window.tableHeadersStore[id] = displayHeaders;
+
+        let tableHTML = `<div class="content-box">
+            <h2>Data ${id.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h2>`;
+
+        if (searchField) {
+            tableHTML += `
+                <div class="search-container">
+                    <input type="text" id="search-input-${id}" placeholder="Cari berdasarkan ${searchField}">
+                    <button type="button" onclick="searchTable('${id}','${searchField.replace(/\s/g,'')}')">🔍 Cari</button>
+                    <button type="button" onclick="resetTable('${id}')">🔁 Reset</button>
+                </div>
+            `;
+        }
+
+        tableHTML += `<div id="table-data-${id}">
+            <table class="data-table" id="data-table-${id}">
+                <thead>
+                    <tr>${displayHeaders.map(h => `<th>${h.toUpperCase().replace(/_/g, ' ')}</th>`).join('')}</tr>
+                </thead>
+                <tbody>
+                    ${displayData.map(row => `
+                        <tr>${displayHeaders.map(h => `<td>${row[h] !== undefined ? row[h] : '-'}</td>`).join('')}</tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            ${data.length === 0 ? '<p style="text-align: center; margin-top: 15px; color: #c0392b;">⚠️ Data masih kosong. Pastikan API Node.js mengembalikan data dengan benar.</p>' : ''}
+        </div></div>`;
+
+        return tableHTML;
+    }
+
+    // searchTable dan resetTable bekerja menggunakan tableDataStore & tableHeadersStore
+    window.searchTable = function(id, field) {
+        const q = document.getElementById(`search-input-${id}`)?.value?.toLowerCase() || '';
+        const raw = window.tableDataStore[id] || [];
+        const headers = window.tableHeadersStore[id] || Object.keys(raw[0] || {});
+
+        const filtered = raw.filter(item => {
+            // try to match against provided field or any field if not exact
+            if (field && item[field] !== undefined) return String(item[field]).toLowerCase().includes(q);
+            return headers.some(h => String(item[h] || '').toLowerCase().includes(q));
+        });
+
+        // rebuild tbody
+        const tbody = document.querySelector(`#data-table-${id} tbody`);
+        if (!tbody) return;
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center;">Tidak ditemukan</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(row => `<tr>${headers.map(h => `<td>${row[h] !== undefined ? row[h] : '-'}</td>`).join('')}</tr>`).join('');
+    }
+
+    window.resetTable = function(id) {
+        const raw = window.tableDataStore[id] || [];
+        const headers = window.tableHeadersStore[id] || Object.keys(raw[0] || {});
+        const tbody = document.querySelector(`#data-table-${id} tbody`);
+        if (!tbody) return;
+        const rows = (raw.length > 0 ? raw : [Object.fromEntries(headers.map(h => [h,'-']))]);
+        tbody.innerHTML = rows.map(row => `<tr>${headers.map(h => `<td>${row[h] !== undefined ? row[h] : '-'}</td>`).join('')}</tr>`).join('');
+        document.getElementById(`search-input-${id}`)?.focus();
+    }
+
+    function renderContent(menuId) {
+        let content = '';
+        switch (menuId) {
+            case 'users':
+                if (userList.length === 0 && token) {
+                    content = `<div class="content-box"><h2>Data Users</h2><p style="text-align: center; padding: 50px; color: #4A90E2;">Memuat data pengguna...</p></div>`;
+                    fetchUserCount();
+                } else {
+                    content = createTable([], userList, { id: '-', name: '-', email: '-', phone: '-', city: '-', registration: '-' }, 'Nama atau Email', 'users');
+                }
+                break;
+
+            case 'summary':
+                content = `
+                    <div class="content-box">
+                        <h2>📊 Summary & Statistik</h2>
+                        <div style="height: 400px; padding: 20px;"><canvas id="myChart1"></canvas></div>
+                        <p style="text-align: center; margin-top: 20px; color: #666;">Diagram Pie: Distribusi User Berdasarkan Kota (Visualisasi Placeholder)</p>
+                    </div>
+                    <div class="content-box" style="margin-top: 20px;">
+                        <div style="height: 400px; padding: 20px;"><canvas id="myChart2"></canvas></div>
+                        <p style="text-align: center; margin-top: 20px; color: #666;">Grafik Batang: Jumlah Swap Harian (Visualisasi Placeholder)</p>
+                    </div>`;
+                contentArea.innerHTML = content;
+                setTimeout(initCharts, 0);
+                return;
+
+            case 'battery':
+                content = createTable([], [], { battery_code: '-', model_name: '-', bms_hardware_version: '-', bms_software_version: '-', nfc_hardware_version: '-', nfc_software_version: '-', device_code: '-', health_value: '-', design_capacity: '-', full_capacity: '-', cycle_index: '-' }, 'Battery Code', 'battery');
+                break;
+
+            case 'swap-station':
+                content = createTable([], [], { point_name: '-', station_code: '-', total_battery: '-', battery72: '-', battery64: '-', software_version: '-', connect_status: '-', read_time: '-', Kota: '-', Lokasi: '-' }, 'Station Code', 'swap-station');
+                break;
+
+            case 'motorcycle':
+                content = createTable([], [], { mc_id: '-', start_date: '-', brand: '-', type: '-', battery_type: '-', motor_code: '-', vin: '-', license_plate: '-', client: '-', client_category: '-', username: '-', phone_number: '-' }, 'VIN', 'motorcycle');
+                break;
+
+            case 'settings':
+                content = `
+                    <div class="content-box">
+                        <h2>⚙️ Pengaturan Akun</h2>
+                        <form class="settings-form" onsubmit="changePassword(event)">
+                            <h3>Ganti Password</h3>
+                            <label for="old_password">Password Lama</label>
+                            <input type="password" id="old_password" required>
+                            <label for="new_password">Password Baru</label>
+                            <input type="password" id="new_password" required>
+                            <label for="confirm_password">Konfirmasi Password Baru</label>
+                            <input type="password" id="confirm_password" required>
+                            <button type="submit">Simpan Password Baru</button>
+                        </form>
+                    </div>`;
+                break;
+
+            default:
+                renderHome();
+                return;
+        }
+
+        contentArea.innerHTML = content;
+    }
+
+    function renderHome() {
+        const totalUsersElement = document.getElementById("totalUsers");
+        const totalUsersValue = totalUsersElement ? totalUsersElement.innerText : '...';
+
+        contentArea.innerHTML = `
+            <div class="cards">
+                <div class="card"><h4>Total Users</h4><p id="totalUsers">${totalUsersValue}</p><div class="icon">👥</div></div>
+                <div class="card"><h4>Active Sessions</h4><p id="activeSessions">0</p><div class="icon">⚡</div></div>
+                <div class="card"><h4>Reports Today</h4><p id="reportsToday">0</p><div class="icon">📩</div></div>
+                <div class="card"><h4>Total Battery</h4><p id="batteryTotal">0</p><div class="icon">🔋</div></div>
+            </div>
+
+            <div class="content-box"><h2>Aktivitas Sistem</h2>
+                <p style="text-align: center; color: #999; padding: 50px;">Grafik, log, atau aktivitas terbaru akan ditampilkan di sini.</p>
+            </div>`;
+
+        // refresh user count
+        fetchUserCount();
+    }
+
+    function initCharts() {
+        if (!document.getElementById('myChart1') || !document.getElementById('myChart2')) return;
+
+        const chartData1 = [45, 25, 15, 15];
+        const chartData2 = [15, 30, 45, 40, 55, 60, 35];
+
+        const ctx1 = document.getElementById('myChart1').getContext('2d');
+        new Chart(ctx1, {
+            type: 'pie',
+            data: { labels: ['Jakarta', 'Bandung', 'Surabaya', 'Lainnya'], datasets: [{ label: 'Distribusi User', data: chartData1, backgroundColor: ['#4A90E2', '#50E3C2', '#FFC107', '#E91E63'], hoverOffset: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+        });
+
+        const ctx2 = document.getElementById('myChart2').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: { labels: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'], datasets: [{ label: 'Jumlah Swap Baterai', data: chartData2, backgroundColor: ['#007AFF'], borderColor: '#0056b3', borderWidth: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function initDashboard() {
+        if (!token) { window.location.href = "html.html"; return; }
+        fetchProfile();
+    }
+
+    // menu listeners
+    const menuItems = document.querySelectorAll('.menu-item');
+    menuItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            menuItems.forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            const menuId = this.id.replace('menu-', '');
+            renderContent(menuId);
+        });
+    });
+
+    window.onload = initDashboard;
+
+</script>
+
+<script>
+// Clock updater
+setInterval(() => {
+  const now = new Date();
+  const jam = now.getHours().toString().padStart(2,'0');
+  const menit = now.getMinutes().toString().padStart(2,'0');
+  const detik = now.getSeconds().toString().padStart(2,'0');
+  document.getElementById('clock').textContent = `${jam}:${menit}:${detik}`;
+}, 1000);
+
+// Set username from fetched profile
+// This waits until profile fetch is complete
+const checkProfile = setInterval(() => {
+  if (window.userProfileData) {
+    document.getElementById('userName').textContent = window.userProfileData.name || window.userProfileData.username || 'User';
+    clearInterval(checkProfile);
+  }
+}, 300);
+</script>
+</body>
+</html>
